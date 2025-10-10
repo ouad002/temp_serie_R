@@ -165,7 +165,7 @@ p_opt
 # Ajuster le modèle AR
 fit_ar <- arima(des_data_diff, order = c(p_opt, 0, 0))
 
-# Supposons que tu choisis un ARMA(1,1,2) pour l'exemple (adapte selon ton analyse)
+# on choisit le modèle ARMA(1,1,2) pour notre cas
 fit_arma <- arima(des_data_diff, order = c(1, 1, 2))
 
 # Analyse des résidus du modèle AR
@@ -191,11 +191,6 @@ print(arch_test_ar)
 arch_test_arma <- ArchTest(res_arma, lags = 12)
 print(arch_test_arma)
 
-# # Graphique des résidus
-# plot(res_arma, type = "l", main = "Résidus du modèle ARMA", ylab = "Résidu", xlab = "Temps")
-# 
-# # Graphique des carrés des résidus
-# plot(res_arma^2, type = "l", main = "Carrés des résidus", ylab = "Résidu^2", xlab = "Temps")
 #2- estimation du modèle ARCH(1), GARCH(1,1)
 if (!requireNamespace("rugarch", quietly = TRUE)) install.packages("rugarch")
 library(rugarch)
