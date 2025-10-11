@@ -1,6 +1,11 @@
 # Majeure Science des Données 2025-2026
+#TP noté séries temporelles
+#groupe : 
+#Karima AMIRI
+#Ouadie BOUSSETTA
+#Abdelaziz MOHAMAD
 
-###partie 1:Importation des données et analyse préliminaire
+###partie1 :Importation des données et analyse préliminaire
 
 # Charger la bibliothèque nécessaire
 if (!requireNamespace("dplyr", quietly = TRUE)) install.packages("dplyr")
@@ -85,7 +90,7 @@ grid()
 
 
 
-## 8. Tester la stationnarité avec ADF et KPSS 
+##8. Tester la stationnarité avec ADF et KPSS 
 if (!requireNamespace("tseries", quietly = TRUE)) install.packages("tseries")
 library(tseries)
 
@@ -113,21 +118,18 @@ cat("\n---- Série différenciée ----\n")
 adf_result_diff
 kpss_result_diff
 
-###partie 2 :
+###partie 2: Modélisation et analyse
 
 ##1-Tracer les fonctions ACF et PACF de la série stationnaire
 par(mfrow = c(1,2))  # pour afficher côte à côte
-
-acf(des_data_diff, main = "ACF de la série désaisonnalisée et différenciée")
-pacf(des_data_diff, main = "PACF de la série désaisonnalisée et différenciée")
+#On travaille sur la série désaisonnalisée et différenciée
+acf(des_data_diff, main = "ACF")
+pacf(des_data_diff, main = "PACF")
 
 par(mfrow = c(1,1))  # retour à un seul graphique
 
 ##2- détermination des ordres optimaux des modèles AR ou MA selon BIC/AIC
-if (!requireNamespace("forecast", quietly = TRUE)) install.packages("forecast")
-library(forecast)
-fit_auto <- forecast::auto.arima(des_data, seasonal = FALSE, stepwise = FALSE, approximation = FALSE)
-fit_auto
+
 # Définir une plage raisonnable d’ordres à tester
 max_p <- 6
 max_q <- 6
@@ -158,16 +160,23 @@ list(
   Best_MA_by_AIC = best_ma_aic,
   Best_MA_by_BIC = best_ma_bic
 )
-##3-
-# Supposons que p_opt est l'ordre optimal AR trouvé (ex: p_opt <- best_ar_bic$p)
+
+##3-Ajustement des modèles AR et ARMA:
+#Pour le modèle AR
+# Supposons que p_opt est l'ordre optimal AR trouvé (6)
 p_opt <- best_ar_bic$p
 p_opt
 # Ajuster le modèle AR
 fit_ar <- arima(des_data_diff, order = c(p_opt, 0, 0))
+#Pour le modèle ARMA
+if (!requireNamespace("forecast", quietly = TRUE)) install.packages("forecast")
+library(forecast)
+fit_auto <- forecast::auto.arima(des_data_diff, seasonal = FALSE, stepwise = FALSE, approximation = FALSE)
+fit_auto
+# on choisit le modèle ARMA(1,0,2) pour notre cas
+fit_arma <- arima(des_data_diff, order = c(1, 0, 2))
 
-# on choisit le modèle ARMA(1,1,2) pour notre cas
-fit_arma <- arima(des_data_diff, order = c(1, 1, 2))
-
+#Analyse des résidus
 # Analyse des résidus du modèle AR
 res_ar <- residuals(fit_ar)
 acf(res_ar, main = paste("ACF des résidus du modèle AR(", p_opt, ")"))
@@ -175,10 +184,13 @@ Box.test(res_ar, lag = 12, type = "Ljung-Box")
 
 # Analyse des résidus du modèle ARMA
 res_arma <- residuals(fit_arma)
-acf(res_arma, main = "ACF des résidus du modèle ARMA(1,1,2)")
+acf(res_arma, main = "ACF des résidus du modèle ARMA(1,0,2)")
 Box.test(res_arma, lag = 12, type = "Ljung-Box")
-#partie 3 :
-##1-
+
+
+###partie3 :Modèles ARCH et GARCH
+
+##1-Appliquer le test ARCH d’Engle
 if (!requireNamespace("lmtest", quietly = TRUE)) install.packages("lmtest")
 if (!requireNamespace("FinTS", quietly = TRUE)) install.packages("FinTS")
 library(FinTS)
@@ -191,10 +203,10 @@ print(arch_test_ar)
 arch_test_arma <- ArchTest(res_arma, lags = 12)
 print(arch_test_arma)
 
-#2- estimation du modèle ARCH(1), GARCH(1,1)
+##2- Estimation du modèle ARCH(1), GARCH(1,1)
 if (!requireNamespace("rugarch", quietly = TRUE)) install.packages("rugarch")
 library(rugarch)
-
+#Le modèle ARCH(1)
 spec_arch <- ugarchspec(
   variance.model = list(model = "sGARCH", garchOrder = c(1,0)), # ARCH(1) : p=1, q=0
   mean.model     = list(armaOrder = c(0,0)),                   # moyenne : pas d'ARMA
@@ -202,6 +214,8 @@ spec_arch <- ugarchspec(
 )
 fit_arch <- ugarchfit(spec = spec_arch, data = res_arma)
 show(fit_arch)
+
+#Le modèle GARCH(1,1)
 spec_garch <- ugarchspec(
   variance.model = list(model = "sGARCH", garchOrder = c(1,1)), # GARCH(1,1): p=1, q=1
   mean.model     = list(armaOrder = c(0,0)),                    # moyenne : pas d'ARMA
@@ -209,47 +223,37 @@ spec_garch <- ugarchspec(
 )
 fit_garch <- ugarchfit(spec = spec_garch, data = res_arma)
 show(fit_garch)
-# 3- Comparaison robuste AIC/BIC
+
+# Pour ARCH(1)
+# Coefficients et p-values
+coef_arch <- coef(fit_arch)
+pvalues_arch <- fit_arch@fit$matcoef[,"Pr(>|t|)"]
+print(data.frame(Coefficient = coef_arch, P_value = pvalues_arch))
+
+# Pour GARCH(1,1)
+# Coefficients et p-values
+coef_garch <- coef(fit_garch)
+pvalues_garch <- fit_garch@fit$matcoef[,"Pr(>|t|)"]
+print(data.frame(Coefficient = coef_garch, P_value = pvalues_garch))
+
+##3- Comparaison robuste AIC/BIC
+# Extraction des critères d'information
 ic_arch  <- infocriteria(fit_arch)
 ic_garch <- infocriteria(fit_garch)
-print(ic_arch)
-print(names(ic_arch))
-print(ic_garch)
-print(names(ic_garch))
-
-# Ordre dans infocriteria: Akaike, Bayes, Shibata, Hannan-Quinn
-aic_arch  <- as.numeric(ic_arch[1])
-bic_arch  <- as.numeric(ic_arch[2])
-aic_garch <- as.numeric(ic_garch[1])
-bic_garch <- as.numeric(ic_garch[2])
-
-
-# Affichage tableau
+# Création du tableau de comparaison
 comp <- data.frame(
   Model = c("ARCH(1)", "GARCH(1,1)"),
-  AIC   = c(aic_arch, aic_garch),
-  BIC   = c(bic_arch, bic_garch)
+  AIC   = c(ic_arch[1], ic_garch[1]),
+  BIC   = c(ic_arch[2], ic_garch[2])
 )
 print(comp)
 
-# Vérifications NA
-if (any(is.na(comp$AIC)) || any(is.na(comp$BIC))) {
-  cat("\nAttention: au moins une valeur AIC/BIC est NA. Vérifier l'estimation des modèles.\n")
-} else {
-  if (aic_arch < aic_garch && bic_arch < bic_garch) {
-    cat("\nConclusion: ARCH(1) préféré selon AIC et BIC.\n")
-  } else if (aic_garch < aic_arch && bic_garch < bic_arch) {
-    cat("\nConclusion: GARCH(1,1) préféré selon AIC et BIC.\n")
-  } else {
-    cat("\nConclusion: critères divergents (AIC vs BIC). Choisir le plus parcimonieux (BIC) et vérifier les diagnostics des résidus.\n")
-  }
-}
-#4-
-# Choisir les résidus du modèle final (ex: ARCH(1) via rugarch)
+##4-Vérification de la qualité des résidus finales 
+# Choisir les résidus du modèle final (ARCH(1))
 res <- residuals(fit_arch, standardize = TRUE)  # résidus standardisés rugarch
 res <- as.numeric(res)
 
-# 1) Absence d'autocorrélation (bruit blanc)
+#Absence d'autocorrélation (bruit blanc)
 par(mfrow = c(1,2))
 acf(res, main = "ACF résidus standardisés")
 acf(res^2, main = "ACF résidus^2 (volatilité)")
@@ -259,7 +263,7 @@ lb2  <- Box.test(res^2, lag = 12, type = "Ljung-Box")
 print(lb1)
 print(lb2)
 
-# 2) Normalité (QQ-plot + tests)
+#Normalité (QQ-plot + tests)
 par(mfrow = c(1,2))
 hist(res, breaks = "FD", main = "Histogramme des résidus", xlab = "résidus")
 qqnorm(res); qqline(res, col = 2, lwd = 2)
@@ -269,19 +273,178 @@ library(nortest)
 print(ad.test(res))     # Anderson–Darling
 print(shapiro.test(res[sample.int(length(res), min(5000, length(res))) ]))  # Shapiro (échantillon)
 
-# 3) Hétéroscédasticité résiduelle (ARCH restant)
+#Hétéroscédasticité résiduelle (ARCH restant)
 if (!requireNamespace("FinTS", quietly = TRUE)) install.packages("FinTS")
 library(FinTS)
 print(ArchTest(res, lags = 12))
 
-# 4) Indépendance série/variance (tests additionnels rugarch si dispo)
-if ("rugarch" %in% .packages()) {
-  show(fit_arch)  # déjà contient les Weighted Ljung-Box et Sign Bias, etc.
+
+###Partie 4: Prévision avec ARMA(1,2)-ARCH(1)
+
+## 1. Prévision pour une année (12 observations)
+#Modèle ARMA(1,2)-ARCH(1) complet
+spec_arma_arch <- ugarchspec(
+  variance.model = list(model = "sGARCH", garchOrder = c(1,0)), # ARCH(1)
+  mean.model     = list(armaOrder = c(1,2)),                   # ARMA(1,2) pour la moyenne
+  distribution.model = "norm"
+)
+
+#Ajustement sur la série désaisonnalisée et différenciée
+fit_arma_arch <- ugarchfit(spec = spec_arma_arch, data = des_data_diff)
+show(fit_arma_arch)
+
+#Prévisions à 12 pas
+fcast_complete <- ugarchforecast(fit_arma_arch, n.ahead = 12)
+
+#Extraire les prévisions
+mu_pred_complete    <- fitted(fcast_complete)    # moyenne ARMA prédite
+sigma_pred_complete <- sigma(fcast_complete)     # volatilité ARCH prédite
+upper95_complete    <- mu_pred_complete + 1.96 * sigma_pred_complete
+lower95_complete    <- mu_pred_complete - 1.96 * sigma_pred_complete
+
+#Créer les séries ts pour l'alignement temporel
+last_time   <- time(des_data_diff)[length(des_data_diff)]
+start_year  <- floor(last_time)
+start_month <- round((last_time - start_year) * 12) + 1
+
+#Si start_month > 12, ajuster
+if (start_month > 12) {
+  start_year  <- start_year + 1
+  start_month <- start_month - 12
 }
 
-# 5) Récapitulatif décisionnel
-pvals <- c(LB_res = lb1$p.value, LB_res2 = lb2$p.value)
-cat("\nSeuil 5%: p-values Ljung-Box résidus =", round(pvals["LB_res"],4),
-    ", résidus^2 =", round(pvals["LB_res2"],4), "\n")
+#Convertir en objets ts
+preds_complete <- ts(mu_pred_complete, start = c(start_year, start_month), frequency = 12)
+upper_complete <- ts(upper95_complete, start = c(start_year, start_month), frequency = 12)
+lower_complete <- ts(lower95_complete, start = c(start_year, start_month), frequency = 12)
+
+#Affichage du tableau récapitulatif
+library(zoo)
+months <- as.yearmon(time(preds_complete))
+forecast_table <- data.frame(
+  Month         = format(months, "%b %Y"),
+  Mean_Pred     = round(as.numeric(preds_complete), 4),
+  Lower_95_CI   = round(as.numeric(lower_complete), 4),
+  Upper_95_CI   = round(as.numeric(upper_complete), 4)
+)
+print(forecast_table)
+
+
+## 2. Tracé avec intervalles de confiance à 95%
+plot(des_data_diff, type = "l", col = "black", lwd = 1.5,
+     ylab = "Température différenciée (°C)", xlab = "Temps",
+     main = "Prévision ARMA(1,2)-ARCH(1) avec IC 95%")
+
+lines(preds_complete, col = "blue", lwd = 2)
+lines(upper_complete, col = "red", lty = 2)
+lines(lower_complete, col = "red", lty = 2)
+
+legend("topleft", legend = c("Historique", "Prévision", "IC 95%"),
+       col = c("black", "blue", "red"), lty = c(1,1,2), lwd = c(1.5,2,1))
+
+##3.Évaluation des performances prédictives (MSE, MAPE)
+# Pour cela, on utilise les 12 dernières observations comme "vraies valeurs"
+n_obs <- length(des_data_diff)
+actual_values <- des_data_diff[(n_obs-11):n_obs]  # 12 dernières observations
+
+# Refaire une prévision sur les données tronquées (sans les 12 derniers points)
+data_truncated <- des_data_diff[1:(n_obs-12)]
+
+# Réajuster le modèle sur les données tronquées
+fit_truncated <- ugarchfit(spec = spec_arma_arch, data = data_truncated)
+fcast_truncated <- ugarchforecast(fit_truncated, n.ahead = 12)
+predicted_values <- fitted(fcast_truncated)
+
+# Calcul des erreurs
+errors <- actual_values - predicted_values
+
+# Métriques de performance
+MSE  <- mean(errors^2, na.rm = TRUE)
+RMSE <- sqrt(MSE)
+MAE  <- mean(abs(errors), na.rm = TRUE)
+MAPE <- mean(abs(errors / actual_values), na.rm = TRUE) * 100
+
+# Affichage des résultats
+cat("\n=== ÉVALUATION DES PERFORMANCES PRÉDICTIVES ===\n")
+cat("MSE  (Mean Squared Error)     :", round(MSE, 4), "\n")
+cat("RMSE (Root Mean Squared Error):", round(RMSE, 4), "\n")
+cat("MAE  (Mean Absolute Error)    :", round(MAE, 4), "\n")
+cat("MAPE (Mean Absolute Perc. Err):", round(MAPE, 2), "%\n")
+
+# Graphique de comparaison prévisions vs réalisations
+plot(1:12, actual_values, type = "o", col = "black", pch = 19, lwd = 2,
+     ylab = "Valeurs", xlab = "Mois", 
+     main = "Comparaison Prévisions vs Réalisations")
+lines(1:12, predicted_values, type = "o", col = "blue", pch = 17, lwd = 2)
+legend("topright", legend = c("Valeurs réelles", "Prévisions"),
+       col = c("black", "blue"), pch = c(19, 17), lty = 1)
+grid()
+
+##4.Comparaison : prévision ARMA(1,2) sans ARCH
+
+library(forecast)
+
+#Ajustement d’un modèle ARMA(1,2) sur la série désaisonnalisée différenciée
+fit_arma_only <- Arima(des_data_diff, order = c(1, 0, 2), include.constant = TRUE)
+summary(fit_arma_only)
+
+#Prévision à 12 pas
+fc_arma_only <- forecast(fit_arma_only, h = 12)
+
+#Extraction des prévisions et intervalles 95 %
+preds_arma    <- fc_arma_only$mean
+lower_arma    <- fc_arma_only$lower[,2]  # borne basse 95%
+upper_arma    <- fc_arma_only$upper[,2]  # borne haute 95%
+
+#Construction des ts pour alignement temporel
+last_time     <- time(des_data_diff)[length(des_data_diff)]
+start_year    <- floor(last_time)
+start_month   <- round((last_time - start_year) * 12) + 1
+if (start_month > 12) {
+  start_year  <- start_year + 1
+  start_month <- start_month - 12
+}
+preds_arma_ts <- ts(preds_arma, start = c(start_year, start_month), frequency = 12)
+lower_arma_ts <- ts(lower_arma, start = c(start_year, start_month), frequency = 12)
+upper_arma_ts <- ts(upper_arma, start = c(start_year, start_month), frequency = 12)
+
+#Tracé comparatif
+plot(des_data_diff, type = "l", col = "black", lwd = 1.5,
+     ylab = "Température différenciée (°C)",
+     xlab = "Temps",
+     main = "Prévision ARMA(1,2) vs ARMA(1,2)-ARCH(1)")
+lines(preds_arma_ts, col = "darkgreen", lwd = 2)
+lines(lower_arma_ts, col = "darkgreen", lty = 2)
+lines(upper_arma_ts, col = "darkgreen", lty = 2)
+lines(preds_complete, col = "blue", lwd = 2)       # ARMA+ARCH
+lines(lower_complete, col = "red",    lty = 2)     # IC ARCH
+lines(upper_complete, col = "red",    lty = 2)
+legend("bottomleft",
+       inset = c(0.002, 0.005),
+       legend = c("Historique", "ARMA(1,2) prévision", "IC ARMA", 
+                  "ARMA(1,2)-ARCH(1) prévision", "IC ARCH"),
+       col    = c("black",       "darkgreen",       "darkgreen",
+                  "blue",         "red"),
+       lty    = c(1,             1,                 2,
+                  1,             2),
+       lwd    = c(1.5,           2,                 1,
+                  2,             1))
+
+#Évaluation hors-échantillon
+n_obs         <- length(des_data_diff)
+actual_values <- des_data_diff[(n_obs-11):n_obs]
+# ARMA seul
+fc_trunc_arma <- forecast(Arima(des_data_diff[1:(n_obs-12)], order = c(1,0,2)), h = 12)
+preds_arma_ho <- fc_trunc_arma$mean
+
+# Erreurs et métriques
+errors_arma    <- actual_values - preds_arma_ho
+MSE_arma       <- mean(errors_arma^2)
+MAPE_arma      <- mean(abs(errors_arma / actual_values)) * 100
+
+cat("=== Performance ARMA(1,2) seul ===\n")
+cat("MSE :", round(MSE_arma, 4), "\n")
+cat("MAPE:", round(MAPE_arma, 2), "%\n")
+
 
 
